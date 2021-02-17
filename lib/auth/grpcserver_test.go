@@ -567,6 +567,19 @@ func TestGenerateUserSingleUseCert(t *testing.T) {
 	err = as.AuthServer.SetAuthPreference(authPref)
 	require.NoError(t, err)
 
+	// Register an SSH node.
+	node := &types.ServerV2{
+		Kind:    types.KindKubeService,
+		Version: types.V2,
+		Metadata: types.Metadata{
+			Name: "node-a",
+		},
+		Spec: types.ServerSpecV2{
+			Hostname: "node-a",
+		},
+	}
+	_, err = as.AuthServer.UpsertNode(node)
+	require.NoError(t, err)
 	// Register a k8s cluster.
 	k8sSrv := &types.ServerV2{
 		Kind:    types.KindKubeService,
@@ -580,9 +593,24 @@ func TestGenerateUserSingleUseCert(t *testing.T) {
 	}
 	err = as.AuthServer.UpsertKubeService(ctx, k8sSrv)
 	require.NoError(t, err)
+	// Register a database.
+	db := types.NewDatabaseServerV3("db-a", nil, types.DatabaseServerSpecV3{
+		Protocol: "postgres",
+		URI:      "localhost",
+		Hostname: "localhost",
+		HostID:   "localhost",
+	})
+	_, err = as.AuthServer.UpsertDatabaseServer(ctx, db)
+	require.NoError(t, err)
 
 	// Create a fake user.
-	user, _, err := CreateUserAndRole(as.AuthServer, "mfa-user", []string{"role"})
+	user, role, err := CreateUserAndRole(as.AuthServer, "mfa-user", []string{"role"})
+	require.NoError(t, err)
+	// Make sure MFA is required for this user.
+	roleOpt := role.GetOptions()
+	roleOpt.RequireSessionMFA = true
+	role.SetOptions(roleOpt)
+	err = as.AuthServer.UpsertRole(ctx, role)
 	require.NoError(t, err)
 	cl, err := srv.NewClient(TestUser(user.GetName()))
 	require.NoError(t, err)

@@ -126,6 +126,7 @@ func promptU2FChallenges(ctx context.Context, proxyAddr string, challenges []*pr
 		})
 	}
 
+	log.Debugf("prompting U2F devices with facet %q", facet)
 	resp, err := u2f.AuthenticateSignChallenge(ctx, facet, u2fChallenges...)
 	if err != nil {
 		return nil, trace.Wrap(err)
