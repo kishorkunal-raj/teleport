@@ -28,30 +28,27 @@ import (
 	"github.com/pborman/uuid"
 )
 
+var (
+	crtPath    = "certs/access-admin.crt"
+	keyPath    = "certs/access-admin.key"
+	casPath    = "certs/access-admin.cas"
+	idFilePath = "certs/access-admin-identity"
+	// Create valid tlsConfig here to use TLS Provider
+	tlsConfig *tls.Config
+)
+
 func main() {
 	ctx := context.Background()
 	log.Printf("Starting Teleport client...")
 
-	var tlsConfig *tls.Config
-	// Create valid tlsConfig here to use TLS Provider
-
-	cfg, err := connectToProxy(ctx)
-	if err != nil {
-		log.Fatalf("Failed to connect to Proxy: %v", err)
-	}
-
 	// clt, err := client.New(*cfg)
 	clt, err := client.New(client.Config{
-		Dialer: cfg.Dialer,
+		Addrs: []string{"proxy.example.com:3080"},
 		// Multiple credentials can be tried by providing credentialProviders. The first
 		// provider to provide valid credentials will be used to authenticate the client.
 		CredentialsProviders: []client.CredentialsProvider{
-			client.NewKeyPairProvider(
-				"certs/access-admin.crt",
-				"certs/access-admin.key",
-				"certs/access-admin.cas",
-			),
-			client.NewIdentityFileProvider("certs/access-admin-identity"),
+			client.NewIdentityFileProvider(idFilePath),
+			client.NewKeyPairProvider(crtPath, keyPath, casPath),
 			client.NewTLSProvider(tlsConfig),
 		},
 	})

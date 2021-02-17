@@ -129,7 +129,7 @@ func getExpectedCreds(t *testing.T) (*Credentials, error) {
 	tls, err := getTLS(t)
 	require.NoError(t, err)
 
-	creds := &Credentials{tls}
+	creds := &Credentials{TLS: tls}
 	require.NoError(t, creds.CheckAndSetDefaults())
 
 	return creds, nil

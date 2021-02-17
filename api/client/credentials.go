@@ -22,13 +22,16 @@ import (
 	"io/ioutil"
 
 	"github.com/gravitational/teleport/api/constants"
+
 	"github.com/gravitational/trace"
+	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/http2"
 )
 
 // Credentials are used to authenticate the client's connection to the server.
 type Credentials struct {
 	TLS *tls.Config
+	SSH *ssh.ClientConfig
 }
 
 // CheckAndSetDefaults checks and sets default credential values.
@@ -52,12 +55,17 @@ func LoadIdentityFile(path string) (*Credentials, error) {
 		return nil, trace.BadParameter("identity file could not be decoded: %v", err)
 	}
 
-	tls, err := idf.TLS()
+	tls, err := idf.TLSConfig()
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
 
-	creds, err := LoadTLS(tls)
+	var ssh *ssh.ClientConfig
+
+	creds := &Credentials{
+		TLS: tls,
+		SSH: ssh,
+	}
 	return creds, trace.Wrap(err)
 }
 

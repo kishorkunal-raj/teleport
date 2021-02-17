@@ -77,7 +77,7 @@ func New(cfg Config) (*Client, error) {
 }
 
 func (c *Client) connect(noPingCheck bool) error {
-	dialer := grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+	authDialer := grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
 		if c.isClosed() {
 			return nil, trace.ConnectionProblem(nil, "client is closed")
 		}
@@ -93,13 +93,13 @@ func (c *Client) connect(noPingCheck bool) error {
 	var err error
 	for i, provider := range c.c.CredentialsProviders {
 		if c.c.Credentials, err = provider.Load(); err != nil {
-			errs = append(errs, trace.Errorf("CredentialsProvider[%v]: %v", i, err))
+			errs = append(errs, trace.Errorf("CredentialsProvider[%v]: failed to load Credentials: %v", i, err))
 			continue
 		}
 
 		c.conn, err = grpc.Dial(
 			constants.APIDomain,
-			dialer,
+			authDialer,
 			grpc.WithTransportCredentials(credentials.NewTLS(c.c.Credentials.TLS)),
 			grpc.WithKeepaliveParams(keepalive.ClientParameters{
 				Time:                c.c.KeepAlivePeriod,
@@ -108,7 +108,7 @@ func (c *Client) connect(noPingCheck bool) error {
 			}),
 		)
 		if err != nil {
-			errs = append(errs, trace.Errorf("CredentialsProvider[%v]: %v", i, err))
+			errs = append(errs, trace.Errorf("CredentialsProvider[%v]: failed to create dialer: %v", i, err))
 			continue
 		}
 		c.grpc = proto.NewAuthServiceClient(c.conn)
@@ -117,13 +117,72 @@ func (c *Client) connect(noPingCheck bool) error {
 			return nil
 		}
 
-		if _, err := c.Ping(context.TODO()); err != nil {
-			errs = append(errs, trace.Errorf("CredentialsProvider[%v]: %v", i, err))
+		_, err := c.Ping(context.TODO())
+		if err == nil {
+			// TODO (Joerger): Check the server version with Ping response.
+			return nil
+		}
+		errs = append(errs, trace.Errorf("CredentialsProvider[%v]: failed to connect through auth: %v", i, err))
+
+		// if connecting to auth fails, try connecting via proxy
+		if c.c.Credentials.SSH == nil {
+			// No identity file was provided, don't try dialing via a reverse
+			// tunnel on the proxy.
 			continue
 		}
 
-		// TODO (Joerger): Check the server version with Ping response.
-		// TODO (Joerger): if connecting to auth fails, try connecting via proxy
+		var tunAddr string
+		tunAddr = "proxy.example.com:3024"
+		// // Figure out the reverse tunnel address on the proxy first.
+		// tunAddr, err := findReverseTunnel(ctx, cfg.AuthServers, clientConfig.TLS.InsecureSkipVerify)
+		// if err != nil {
+		// 	errs = append(errs, trace.Wrap(err, "failed lookup of proxy reverse tunnel address: %v", err))
+		// 	return nil, trace.NewAggregate(errs...)
+		// }
+
+		dialer := &TunnelAuthDialer{
+			ProxyAddr:    tunAddr,
+			ClientConfig: c.c.Credentials.SSH,
+		}
+
+		proxyDialer := grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+			if c.isClosed() {
+				return nil, trace.ConnectionProblem(nil, "client is closed")
+			}
+			conn, err := dialer.DialContext(ctx, "tcp", addr)
+			if err != nil {
+				return nil, trace.ConnectionProblem(err, err.Error())
+			}
+			return conn, nil
+		})
+
+		c.conn, err = grpc.Dial(
+			constants.APIDomain,
+			proxyDialer,
+			grpc.WithTransportCredentials(credentials.NewTLS(c.c.Credentials.TLS)),
+			grpc.WithKeepaliveParams(keepalive.ClientParameters{
+				Time:                c.c.KeepAlivePeriod,
+				Timeout:             c.c.KeepAlivePeriod * time.Duration(c.c.KeepAliveCount),
+				PermitWithoutStream: true,
+			}),
+		)
+		if err != nil {
+			errs = append(errs, trace.Errorf("CredentialsProvider[%v]: failed to create dialer: %v", i, err))
+			continue
+		}
+		c.grpc = proto.NewAuthServiceClient(c.conn)
+
+		if noPingCheck {
+			return nil
+		}
+
+		_, err = c.Ping(context.TODO())
+		if err == nil {
+			// TODO (Joerger): Check the server version with Ping response.
+			return nil
+		}
+		errs = append(errs, trace.Errorf("CredentialsProvider[%v]: failed to connect through auth: %v", i, err))
+
 		// TODO (Joerger): start goroutine to detect provider reloads asynchronously.
 
 		return nil
