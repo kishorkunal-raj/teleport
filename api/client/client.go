@@ -83,7 +83,7 @@ func (c *Client) connect(noPingCheck bool) error {
 		}
 		conn, err := c.c.Dialer.DialContext(ctx, "tcp", addr)
 		if err != nil {
-			return nil, trace.ConnectionProblem(err, "failed to dial")
+			return nil, trace.ConnectionProblem(err, err.Error())
 		}
 		return conn, nil
 	})
