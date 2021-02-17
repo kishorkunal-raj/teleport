@@ -107,7 +107,18 @@ $ helm install teleport teleport/teleport
 
     !!! note
 
-        The Teleport package in Homebrew is not maintained by Teleport. We recommend the use of our [own Teleport packages](https://goteleport.com/teleport/download?os=macos).
+        The Teleport package in Homebrew is not maintained by Teleport and we
+        can't guarantee its reliability or security. We recommend the use of
+        our [own Teleport
+        packages](https://goteleport.com/teleport/download?os=macos).
+
+    !!! note
+
+        If you choose to use Homebrew, you must verify that the versions of
+        `tsh` and `tctl` are compatible with the versions you run server-side.
+        Homebrew usually ships the latest release of Teleport, which may be
+        incompatible with older versions.  See our [compatibility
+        policy](admin-guide.md#component-compatibility) for details.
 
 === "Terminal"
 
